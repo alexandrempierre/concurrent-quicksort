@@ -51,6 +51,7 @@ void dequeue (t_queue *queue, size_t r[2]) {
 
         free(first);
     }
+}
 
 bool empty (t_queue *queue) {
     return ( queue == NULL || queue->first == NULL );

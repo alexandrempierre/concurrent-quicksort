@@ -3,6 +3,9 @@
 #include <pthread.h>
 #include "queue.h"
 
+#define FALSE   0
+#define TRUE    1
+
 /* `todo` vai guardar os pares `min_index` e `max_index` das sublistas que já estão
  * liberadas para ser ordenadas 
  * 
@@ -22,69 +25,58 @@ pthread_cond_t cond;
 size_t v_length;
 int n_threads;
 
-size_t quicksort (size_t, size_t);
+size_t quicksort (size_t, size_t, size_t);
 
 void *worker (void *arg) {
+    size_t *id = (size_t *) arg;
+
     size_t p, lims[2], lo, hi;
     
-    while ( doing > 0 || !empty(to_do) ) {
+    // printf("thread %zu começando...\n", *id);
+
+    while ( !empty(to_do) || doing ) {
         /* If there are threads processing sublists but no tasks to do, wait until
          * any task comes up or no thread is doing anything.
          * 
          * If the task queue is empty and no thread is processing any sublist we 
          * can say that the array is sorted and this thread can close itself
          */
-        while (empty(to_do) && doing > 0) {
-            pthread_cond_wait(&cond, &mutex);
-        }
-
-        /* this piece is to avoid that the thread gets a mutex only to do nothing */
-        if ( empty(to_do) && doing == 0 ) break;
-
-        /* reads and removes the data to work from the queue */
         pthread_mutex_lock(&mutex);
         {
+            while (empty(to_do) && doing) {
+                // printf("thread %zu se bloqueou\n", *id);
+                pthread_cond_wait(&cond, &mutex);
+                // printf("thread %zu foi desbloqueada\n", *id);
+            }
+
             doing++;
-            
+
+            // printf("thread %zu desenfileirando valores\n", *id);
             dequeue(to_do, lims);
             
             lo = lims[0];
             hi = lims[1];
+            // printf("thread %zu indo começar quicksort...\n", *id);
         }
         pthread_mutex_unlock(&mutex);
 
-        /* This is my first version of the concurentization of the 
-         * basic Hoare version of quicksort as it is in Wikipedia.
-         * 
-         * I needed to repeat some code in if and else because 
-         * it feels better (haven't tested) than trying to get 
-         * the lock two times only to avoid writing an else an 
-         * repeating two lines of code.
-         */
-        if (lo < hi) {
-            p = quicksort(lo, hi);
+        p = quicksort(lo, hi, *id);
 
-            pthread_mutex_lock(&mutex);
-            {
-                if (lo < p) enqueue(lo, p, to_do);
+        pthread_mutex_lock(&mutex);
+        {
+            // printf("thread %zu enfileirando próximos valores (se houver)\n", *id);
+            if (lo < p) enqueue(lo, p, to_do);
 
-                if (p+1 < hi) enqueue(p+1, hi, to_do);
-                
-                doing--;
-                pthread_cond_broadcast(&cond);
-            }
-            pthread_mutex_unlock(&mutex);
+            if (p+1 < hi) enqueue(p+1, hi, to_do);
+            
+            doing--;
+            pthread_cond_broadcast(&cond);
+            // printf("thread %zu fez um broadcast\n", *id);
         }
-        else {
-            pthread_mutex_lock(&mutex);
-            {
-                doing--;
-                pthread_cond_broadcast(&cond);
-            }
-            pthread_mutex_unlock(&mutex);
-        }
-        
+        pthread_mutex_unlock(&mutex);
     }
+
+    // printf("thread %zu acabou, doing = %d\n", *id, doing);
 
     /* When there's no thread doing anything and no items waiting in the queue 
      * it's time to end the thread.
@@ -97,6 +89,7 @@ int main(int argc, char const *argv[])
     size_t i, t;
 
     pthread_t *thread;
+    int *thread_id;
     
     pthread_mutex_init(&mutex, NULL); // initialize mutual exclusion variable
     pthread_cond_init(&cond, NULL); // initialize condition variable
@@ -116,8 +109,15 @@ int main(int argc, char const *argv[])
     if (n_threads < 1) n_threads = 1;
 
     /* allocate thread identifier array */
-    if ( ( thread = malloc(n_threads * sizeof(pthread_t)) ) == NULL ) {
+    if ( ( thread = (pthread_t *) malloc(n_threads * sizeof(pthread_t)) ) == NULL ) {
         fprintf(stderr, "ERROR -- malloc -- thread (pthread_t array)\n");
+
+        return 2;
+    }
+
+    /* allocate thread readable identifier array */
+    if ( ( thread_id = (int *) malloc(n_threads * sizeof(int)) ) == NULL ) {
+        fprintf(stderr, "ERROR -- malloc -- thread_id (size_t array)\n");
 
         return 2;
     }
@@ -138,9 +138,13 @@ int main(int argc, char const *argv[])
     to_do = create_queue();
     enqueue(0, v_length-1, to_do);
 
+    doing = 0;
+
     /* create threads */
     for (t = 0; t < n_threads; t++) {
-        if ( pthread_create(thread + t, NULL, worker, NULL) ) {
+        thread_id[t] = t;
+        if ( pthread_create(thread + t, NULL, worker, (void *) (thread_id + t)) ) {
+        // if ( pthread_create(thread + t, NULL, worker, NULL) ) {
             fprintf(stderr, "ERROR -- pthread_create\n");
 
             return 3;
@@ -178,16 +182,20 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-size_t quicksort (size_t lo, size_t hi) {
+size_t quicksort (size_t lo, size_t hi, size_t id) {
     size_t pivot = v[lo + (hi-lo)/2]; // this is an overflow resistant version of (lo + hi)/2
     size_t i=lo-1, j=hi+1;
     int temp;
     
+    // printf("thread %zu entrou no quicksort\n", id);
     while ( 1 ) {
         do { i++; } while( v[i] < pivot );
         do { j--; } while( v[j] > pivot );
 
-        if ( i >= j ) return j;
+        if ( i >= j ) { 
+            // printf("thread %zu saiu do quicksort\n", id);
+            return j; 
+        }
         
         temp = v[i];
         v[i] = v[j];

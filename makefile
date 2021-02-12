@@ -1,4 +1,4 @@
-all: clean random_stream.out quicksort.out
+all: random_stream.out quicksort.out
 
 quicksort.out: queue.o
 	gcc -o quicksort.out quicksort.c queue.o -lpthread -Wall --pedantic
