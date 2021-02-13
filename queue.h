@@ -7,7 +7,7 @@
 typedef int bool;
 
 typedef struct queue_node {
-    size_t lo, hi;
+    int lo, hi;
     struct queue_node *next;
 } t_queue_node;
 
@@ -17,9 +17,13 @@ typedef struct queue {
 
 t_queue *create_queue (void);
 
+void destroy_queue (t_queue *queue);
+
+void destroy_nodes (t_queue_node *node);
+
 void enqueue (int lo, int hi, t_queue *queue);
 
-void dequeue (t_queue *queue, size_t lims[2]);
+void dequeue (t_queue *queue, int lims[2]);
 
 bool empty (t_queue *queue);
 

@@ -2,9 +2,14 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include "queue.h"
+#include "insertion_sort.h"
+#include "lcg.h"
+#include "timer.h"
 
 #define FALSE   0
 #define TRUE    1
+
+/* This work wouldn't be possible without https://en.wikipedia.org/wiki/Quicksort#Optimizations */
 
 /* `todo` vai guardar os pares `min_index` e `max_index` das sublistas que já estão
  * liberadas para ser ordenadas 
@@ -22,61 +27,63 @@ int *v;
 pthread_mutex_t mutex;
 pthread_cond_t cond;
 
-size_t v_length;
+int v_length;
 int n_threads;
 
-size_t quicksort (size_t, size_t, size_t);
+int insertion_threshold;
+
+int quicksort (int, int, uint32_t *);
+int median (int, int, int);
+int random_idx (int, int, uint32_t *);
 
 void *worker (void *arg) {
-    size_t *id = (size_t *) arg;
+    uint32_t state = 1 + *(int *) arg;
 
-    size_t p, lims[2], lo, hi;
-    
-    // printf("thread %zu começando...\n", *id);
+    int p, lims[2], lo, hi;
 
     while ( !empty(to_do) || doing ) {
-        /* If there are threads processing sublists but no tasks to do, wait until
+        /* If there are threads processing subarrays but no tasks to do, wait until
          * any task comes up or no thread is doing anything.
          * 
-         * If the task queue is empty and no thread is processing any sublist we 
+         * If the task queue is empty and no thread is processing any subarray we 
          * can say that the array is sorted and this thread can close itself
          */
         pthread_mutex_lock(&mutex);
         {
             while (empty(to_do) && doing) {
-                // printf("thread %zu se bloqueou\n", *id);
                 pthread_cond_wait(&cond, &mutex);
-                // printf("thread %zu foi desbloqueada\n", *id);
-            }
+            } // I find it more understandable with the braces in this specific case
 
             doing++;
 
-            // printf("thread %zu desenfileirando valores\n", *id);
             dequeue(to_do, lims);
             
             lo = lims[0];
             hi = lims[1];
-            // printf("thread %zu indo começar quicksort...\n", *id);
         }
         pthread_mutex_unlock(&mutex);
 
-        p = quicksort(lo, hi, *id);
+        if (hi-lo < insertion_threshold) {
+            insertion_sort(lo, hi, v);
+            p = lo = hi;
+        }
+        else {
+            p = quicksort(lo, hi, &state);
+        }
 
         pthread_mutex_lock(&mutex);
         {
-            // printf("thread %zu enfileirando próximos valores (se houver)\n", *id);
             if (lo < p) enqueue(lo, p, to_do);
 
             if (p+1 < hi) enqueue(p+1, hi, to_do);
             
             doing--;
             pthread_cond_broadcast(&cond);
-            // printf("thread %zu fez um broadcast\n", *id);
         }
         pthread_mutex_unlock(&mutex);
     }
 
-    // printf("thread %zu acabou, doing = %d\n", *id, doing);
+    free(arg);
 
     /* When there's no thread doing anything and no items waiting in the queue 
      * it's time to end the thread.
@@ -86,24 +93,30 @@ void *worker (void *arg) {
 
 int main(int argc, char const *argv[])
 {
-    size_t i, t;
+    int i, t;
 
     pthread_t *thread;
     int *thread_id;
+
+    double start, finish;
     
     pthread_mutex_init(&mutex, NULL); // initialize mutual exclusion variable
     pthread_cond_init(&cond, NULL); // initialize condition variable
 
     /* checks whether the user supplied enough command line arguments */
-    if (argc < 3) {
+    if (argc < 4) {
         fprintf(stderr, "ERROR -- not enough command line arguments\n");
-        fprintf(stderr, "Try calling: %s <number of threads> <array length>\n", argv[0]);
+        fprintf(stderr, "Try calling: %s <number of threads> <insertion sort threashold> <array length>\n", argv[0]);
         
         return 1;
     }
 
     sscanf(argv[1], "%d", &n_threads); // read threads number
-    sscanf(argv[2], "%zu", &v_length); // read (to be sorted) array size
+    /* if the number of elements in an array drop to insertion_threshold or 
+     * lower, the elements in the subarray will be sorted with insertion sort
+     * */
+    sscanf(argv[2], "%d", &insertion_threshold);
+    sscanf(argv[3], "%d", &v_length); // read (to be sorted) array size
 
     /* validates the number of threads */
     if (n_threads < 1) n_threads = 1;
@@ -111,13 +124,6 @@ int main(int argc, char const *argv[])
     /* allocate thread identifier array */
     if ( ( thread = (pthread_t *) malloc(n_threads * sizeof(pthread_t)) ) == NULL ) {
         fprintf(stderr, "ERROR -- malloc -- thread (pthread_t array)\n");
-
-        return 2;
-    }
-
-    /* allocate thread readable identifier array */
-    if ( ( thread_id = (int *) malloc(n_threads * sizeof(int)) ) == NULL ) {
-        fprintf(stderr, "ERROR -- malloc -- thread_id (size_t array)\n");
 
         return 2;
     }
@@ -134,6 +140,8 @@ int main(int argc, char const *argv[])
         scanf("%d", v+i);
     }
 
+    GET_TIME(start); // I'll measure the time to sort the array
+
     /* add to the queue the task of sorting the whole array */
     to_do = create_queue();
     enqueue(0, v_length-1, to_do);
@@ -142,9 +150,9 @@ int main(int argc, char const *argv[])
 
     /* create threads */
     for (t = 0; t < n_threads; t++) {
-        thread_id[t] = t;
-        if ( pthread_create(thread + t, NULL, worker, (void *) (thread_id + t)) ) {
-        // if ( pthread_create(thread + t, NULL, worker, NULL) ) {
+        thread_id = (int *) malloc(sizeof(int));
+        *thread_id = t;
+        if ( pthread_create(thread + t, NULL, worker, (void *) thread_id) ) {
             fprintf(stderr, "ERROR -- pthread_create\n");
 
             return 3;
@@ -159,41 +167,52 @@ int main(int argc, char const *argv[])
             return 4;
         }
     }
+
+    /* The time to read the array entries or check the correctness won't be 
+     * measured.
+     * */
+    GET_TIME(finish);
     
     /* check result */
     for (i = 1; i < v_length; i++) {
         if (v[i-1] > v[i]) {
             fprintf(stderr, "ERROR -- array is not sorted\n");
-            fprintf(stderr, "v[%zu] = %d, v[%zu] = %d\n", i-1, v[i-1], i, v[i]);
+            fprintf(stderr, "v[%d] = %d, v[%d] = %d\n", i-1, v[i-1], i, v[i]);
 
             return 5;
         }
     }
 
-    /* print result */
-    // printf("Sorted array: {");    
-    // for (i = 0; i < v_length; i++){
-    //     printf("%d%s", v[i], i < v_length-1 ? ", " : "");
-    // }
-    // printf("}\n");
+    //puts("Array is sorted!");
 
-    puts("Array is sorted!");
-    
+    printf("%d, %d, %d, %f\n", v_length, n_threads, insertion_threshold, finish-start);
+
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond);
+    free(thread);
+    free(v);
+    destroy_queue(to_do);
+
     return 0;
 }
 
-size_t quicksort (size_t lo, size_t hi, size_t id) {
-    size_t pivot = v[lo + (hi-lo)/2]; // this is an overflow resistant version of (lo + hi)/2
-    size_t i=lo-1, j=hi+1;
+int quicksort (int lo, int hi, uint32_t *state) {
+    int pivot; 
+    int i=lo-1, j=hi+1;
     int temp;
+
+    int idx1, idx2, idx3;
+    idx1 = random_idx(lo, hi, state);
+    idx2 = random_idx(lo, hi, state);
+    idx3 = random_idx(lo, hi, state);
+
+    pivot = median(v[idx1], v[idx2], v[idx3]);
     
-    // printf("thread %zu entrou no quicksort\n", id);
     while ( 1 ) {
         do { i++; } while( v[i] < pivot );
         do { j--; } while( v[j] > pivot );
 
         if ( i >= j ) { 
-            // printf("thread %zu saiu do quicksort\n", id);
             return j; 
         }
         
@@ -201,4 +220,13 @@ size_t quicksort (size_t lo, size_t hi, size_t id) {
         v[i] = v[j];
         v[j] = temp;
     }
+}
+
+int median (int a, int b, int c) {
+    return (a >= b && a <= c) || (a >= c && a <= b) ? a : 
+        (b >= a && b <= c) || (b >= c && b <= a) ? b : c;
+}
+
+int random_idx (int lo, int hi, uint32_t *state) {
+    return lo + (lcg_parkmiller(state) % (hi - lo + 1));
 }

@@ -15,6 +15,25 @@ t_queue *create_queue (void) {
     return queue;
 }
 
+void destroy_queue (t_queue *queue) {
+    if ( !empty(queue) ) destroy_nodes(queue->first);
+
+    if ( queue != NULL ) {
+        queue->first = NULL;
+        queue->last = NULL;
+        
+        free(queue);
+    }
+}
+
+void destroy_nodes (t_queue_node *node) {
+    if (node == NULL) return;
+
+    if (node->next != NULL) destroy_nodes(node->next);
+
+    free(node);
+}
+
 void enqueue (int lo, int hi, t_queue *queue) {
     t_queue_node *node = (t_queue_node *) malloc(sizeof(t_queue_node));
 
@@ -36,7 +55,7 @@ void enqueue (int lo, int hi, t_queue *queue) {
     queue->last = node;
 }
 
-void dequeue (t_queue *queue, size_t r[2]) {
+void dequeue (t_queue *queue, int r[2]) {
     t_queue_node *first;
 
     if ( !empty(queue) ) {
@@ -73,5 +92,5 @@ void print_queue (t_queue *queue, const char *queue_name) {
 }
 
 void print_queue_node (t_queue_node *node) {
-    printf("[%ld..%ld]", node->lo, node->hi);
+    printf("[%d..%d]", node->lo, node->hi);
 }
