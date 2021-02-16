@@ -1,13 +1,13 @@
-all: random_stream.out quicksort.out
+all: ones.out random_stream.out quicksort.out
 
 quicksort.out: queue.o insertion_sort.o lcg.o
 	gcc -o quicksort.out quicksort.c queue.o insertion_sort.o lcg.o -lpthread -Wall --pedantic
 
-# random_stream.out: random_stream.c
-	# gcc -o random_stream.out random_stream.c -Wall --pedantic
-
 random_stream.out: random_stream.c lcg.o
 	gcc -o random_stream.out random_stream.c lcg.o -Wall --pedantic
+
+ones.out: ones.c
+	gcc -o ones.out ones.c -Wall --pedantic
 
 queue.o: queue.c
 	gcc -o queue.o queue.c -c -Wall --pedantic

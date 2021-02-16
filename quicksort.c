@@ -185,7 +185,7 @@ int main(int argc, char const *argv[])
 
     //puts("Array is sorted!");
 
-    printf("%d, %d, %d, %f\n", v_length, n_threads, insertion_threshold, finish-start);
+    printf("%d,%d,%d,%f\n", v_length, n_threads, insertion_threshold, finish-start);
 
     pthread_mutex_destroy(&mutex);
     pthread_cond_destroy(&cond);
