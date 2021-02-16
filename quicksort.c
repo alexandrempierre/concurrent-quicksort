@@ -11,6 +11,9 @@
 
 /* This work wouldn't be possible without https://en.wikipedia.org/wiki/Quicksort#Optimizations */
 
+/* The comment below hav ebeen written before the actual code and will be kept
+ * for historical reasons*/
+
 /* `todo` vai guardar os pares `min_index` e `max_index` das sublistas que já estão
  * liberadas para ser ordenadas 
  * 
@@ -30,6 +33,10 @@ pthread_cond_t cond;
 int v_length;
 int n_threads;
 
+/* If the subarray size drops to this value or below, the subarray will be 
+ * sorted with a sequential insertion sort. See the measurements to know why 
+ * this makes sense.
+ * */
 int insertion_threshold;
 
 int quicksort (int, int, uint32_t *);
@@ -63,6 +70,9 @@ void *worker (void *arg) {
         }
         pthread_mutex_unlock(&mutex);
 
+        /* If the number of elements is <= insertion_thresold
+         * insertion sort will be performed
+         * */
         if (hi-lo < insertion_threshold) {
             insertion_sort(lo, hi, v);
             p = lo = hi;
@@ -183,10 +193,17 @@ int main(int argc, char const *argv[])
         }
     }
 
-    //puts("Array is sorted!");
+    puts("Array is sorted!");
 
-    printf("%d,%d,%d,%f\n", v_length, n_threads, insertion_threshold, finish-start);
+    // printf("v = {");
+    // for (i = 0; i < v_length; i++) {
+    //     printf("%d%s", v[i], i == v_length-1 ? "" : ", ");
+    // }
+    // printf("}\n");
 
+    // printf("%d,%d,%d,%f\n", v_length, n_threads, insertion_threshold, finish-start);
+
+    /* Deallocate variables */
     pthread_mutex_destroy(&mutex);
     pthread_cond_destroy(&cond);
     free(thread);
@@ -201,6 +218,7 @@ int quicksort (int lo, int hi, uint32_t *state) {
     int i=lo-1, j=hi+1;
     int temp;
 
+    /* An adaption of Hoare's partition to be less deterministic */
     int idx1, idx2, idx3;
     idx1 = random_idx(lo, hi, state);
     idx2 = random_idx(lo, hi, state);
@@ -209,7 +227,7 @@ int quicksort (int lo, int hi, uint32_t *state) {
     pivot = median(v[idx1], v[idx2], v[idx3]);
     
     while ( 1 ) {
-        do { i++; } while( v[i] < pivot );
+        do { i++; } while( v[i] < pivot ); 
         do { j--; } while( v[j] > pivot );
 
         if ( i >= j ) { 
