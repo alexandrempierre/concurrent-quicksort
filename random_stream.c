@@ -4,6 +4,20 @@
 
 #include "lcg.h"
 
+/* Uses the linear congruent generator to continuously generate 
+ * pseudo-random numbers based on a initial seed
+ * 
+ * This program can be called with two, one or no command line 
+ * arguments:
+ * 
+ * ./random_stream.out <seed> <upper_bound>
+ * ./random_stream.out <seed>
+ * ./random_stream.out
+ * 
+ * In case of a missing command line argument some default value
+ * will be supplied.
+ * 
+ * */
 int main (int argc, char const *argv[]) {
     uint32_t seed = (uint64_t) time(NULL) % 0x7fffffff;
     uint32_t upper_bound = LCG_RAND_MAX;

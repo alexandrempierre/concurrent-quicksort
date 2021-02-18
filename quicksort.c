@@ -11,8 +11,9 @@
 
 /* This work wouldn't be possible without https://en.wikipedia.org/wiki/Quicksort#Optimizations */
 
-/* The comment below hav ebeen written before the actual code and will be kept
- * for historical reasons*/
+/* The comment below have been written before the actual code and will be kept
+ * due to historical reasons
+ * */
 
 /* `todo` vai guardar os pares `min_index` e `max_index` das sublistas que já estão
  * liberadas para ser ordenadas 
@@ -23,9 +24,9 @@
  * que, além de não ter nenhuma tarefa pendente, não há tarefas rodando que podem 
  * alimentar a fila `todo`
  * */
-t_queue *to_do;
+t_queue *to_do; // tasks queue
 int doing; // variable to store how many threads are active
-int *v;
+int *v; // array to be sorted
 
 pthread_mutex_t mutex;
 pthread_cond_t cond;
@@ -34,8 +35,8 @@ int v_length;
 int n_threads;
 
 /* If the subarray size drops to this value or below, the subarray will be 
- * sorted with a sequential insertion sort. See the measurements to know why 
- * this makes sense.
+ * sorted with a sequential insertion sort. It's an optimization of the 
+ * quicksort proposed by Robert Sedgewick.
  * */
 int insertion_threshold;
 
@@ -43,6 +44,8 @@ int quicksort (int, int, uint32_t *);
 int median (int, int, int);
 int random_idx (int, int, uint32_t *);
 
+/* The function of the thread it will consume the inputs to the task until 
+ * there's nothing more to do. */
 void *worker (void *arg) {
     uint32_t state = 1 + *(int *) arg;
 
@@ -83,17 +86,28 @@ void *worker (void *arg) {
 
         pthread_mutex_lock(&mutex);
         {
+            /* If the pivot is greater than the leftmost index the subarray 
+             * delimited by lo and p will have more than one element and 
+             * therefore will need to be sorted.
+             * */
             if (lo < p) enqueue(lo, p, to_do);
 
+            /* The same as above but with p and hi */
             if (p+1 < hi) enqueue(p+1, hi, to_do);
             
+            /* If the insertion_threshold is not zero the behaviour of the 
+             * above is slightly different. The insertion sort will be 
+             * performed on subarrays of size greater than one and will set 
+             * hi = lo = p to not leave anything to enqueue.
+             * */
+
             doing--;
             pthread_cond_broadcast(&cond);
         }
         pthread_mutex_unlock(&mutex);
     }
 
-    free(arg);
+    free(arg); // when the thread terminates its arguments can be deallocated
 
     /* When there's no thread doing anything and no items waiting in the queue 
      * it's time to end the thread.
@@ -213,6 +227,8 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
+/* This function swaps the elements that are in the wrong "half" of the array 
+ * */
 int quicksort (int lo, int hi, uint32_t *state) {
     int pivot; 
     int i=lo-1, j=hi+1;
@@ -224,27 +240,45 @@ int quicksort (int lo, int hi, uint32_t *state) {
     idx2 = random_idx(lo, hi, state);
     idx3 = random_idx(lo, hi, state);
 
+    /* the pivot is the median of 3 random elements of the subarray */
     pivot = median(v[idx1], v[idx2], v[idx3]);
     
+    /* It looks really strange but it always stops and is necessary because 
+     * the number of iterations is too hard to predict. */
     while ( 1 ) {
-        do { i++; } while( v[i] < pivot ); 
+        /* searches for big numbers in the side of little numbers */
+        do { i++; } while( v[i] < pivot );
+        
+        /* searches for little numbers in the side of big numbers */
         do { j--; } while( v[j] > pivot );
 
+        /* if both searches collided all the numbers are in the correct 
+         * "half"
+         * 
+         * the left and right "halfs" are separated at the position j.
+         * */
         if ( i >= j ) { 
             return j; 
         }
         
+        /* swap numbers found in the wrong "half" */
         temp = v[i];
         v[i] = v[j];
         v[j] = temp;
     }
 }
 
+/* Given 3 integer numbers this function returns the median. 
+ * It's written as ternaries just because it's not too unreadable 
+ * and I felt comfortable writing this function like this. It's not 
+ * for performance either.*/
 int median (int a, int b, int c) {
     return (a >= b && a <= c) || (a >= c && a <= b) ? a : 
         (b >= a && b <= c) || (b >= c && b <= a) ? b : c;
 }
 
+/* Given 2 indices of an array and a state variable, returns a 
+ * pseudorandom index in the interval. */
 int random_idx (int lo, int hi, uint32_t *state) {
     return lo + (lcg_parkmiller(state) % (hi - lo + 1));
 }
