@@ -24,6 +24,10 @@ The first command line argument will always be the seed and the second will be t
 
 The `random_stream` program now uses a linear congruential generator so it can't be seeded with numbers less than or equal to `0` nor with numbers greater than or equal to `0x7fffffff`.
 
+## Calling `ones.out` program
+
+This program never requires any command line arguments, it just prints the number `1` forever. To call it just type `./ones.out` and do any input or output redirections needed.
+
 ## `quicksort`
 
 `./quicksort.out <number of threads> <length of the array to be sorted>`
@@ -43,7 +47,7 @@ In this directory are the time measurements, the conditions are mostly described
 ## Credits
 
 0. Thanks to [mardevs](https://github.com/mardevs) who is an angel and also is with me in this assignment
-1. Wikipedia (for the quicksort entry and for the Linear Congruential Generator entry)
+1. Wikipedia (for the quicksort and Linear Congruential Generator entries)
 2. As always, thanks to my teacher for `timer.h`
-3. Tony Hoare for quicksort and the partition scheme
+3. C. A. R. Hoare for quicksort and the partition scheme
 4. Robert Sedgewick for the optimization list in Wikipedia it even made my code more concurrency-friendly
